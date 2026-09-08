@@ -1,0 +1,24 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function hasActiveAccount() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.active == true;
+    }
+    function isAdmin() {
+      return hasActiveAccount()
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+    match /teachers/{teacherId} {
+      allow read: if hasActiveAccount();
+      allow create, update: if isAdmin();
+      allow delete: if false; // La baja debe ser lógica: active = false.
+    }
+    match /users/{userId} {
+      allow read: if hasActiveAccount() && (request.auth.uid == userId || isAdmin());
+      allow create, update: if isAdmin();
+      allow delete: if false;
+    }
+  }
+}
