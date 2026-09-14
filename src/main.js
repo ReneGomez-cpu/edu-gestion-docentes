@@ -1,6 +1,6 @@
 import { auth } from './services/auth.js';
 import { repository } from './services/database.js';
-import { listTeachers, saveTeacher, validateTeacher } from './services/teachers.js';
+import { deactivateTeacher, listTeachers, saveTeacher, validateTeacher } from './services/teachers.js';
 import { shell } from './components/layout.js';
 import { assignmentRow, teacherForm } from './components/teacher-form.js';
 
@@ -41,7 +41,18 @@ function openTeacherProfile(teacher) {
   modal.querySelectorAll('[data-action="close-profile"]').forEach(button => { button.onclick = () => modal.remove(); });
 }
 
-function openTeacher(teacher) { activeModal = teacher; app.insertAdjacentHTML('beforeend', `<div class="modal-backdrop"><section class="modal"><button class="modal-close" data-action="close-modal">×</button><p class="eyebrow">${teacher ? 'ACTUALIZAR REGISTRO' : 'NUEVO REGISTRO'}</p><h2>${teacher ? 'Editar docente' : 'Registrar docente'}</h2>${teacherForm(teacher)}</section></div>`); const modal = document.querySelector('.modal-backdrop'); modal.querySelectorAll('[data-action="close-modal"]').forEach(button => { button.onclick = () => modal.remove(); }); modal.querySelector('[data-action="add-assignment"]').onclick=()=>modal.querySelector('#assignments').insertAdjacentHTML('beforeend',assignmentRow()); modal.addEventListener('click',e=>{if(e.target.classList.contains('remove-assignment')) e.target.closest('.assignment-row').remove();}); modal.querySelector('form').onsubmit=submitTeacher; }
+function openTeacher(teacher) { activeModal = teacher; app.insertAdjacentHTML('beforeend', `<div class="modal-backdrop"><section class="modal"><button class="modal-close" data-action="close-modal">×</button><p class="eyebrow">${teacher ? 'ACTUALIZAR REGISTRO' : 'NUEVO REGISTRO'}</p><h2>${teacher ? 'Editar docente' : 'Registrar docente'}</h2>${teacherForm(teacher)}</section></div>`); const modal = document.querySelector('.modal-backdrop'); modal.querySelectorAll('[data-action="close-modal"]').forEach(button => { button.onclick = () => modal.remove(); }); modal.querySelector('[data-action="add-assignment"]').onclick=()=>modal.querySelector('#assignments').insertAdjacentHTML('beforeend',assignmentRow()); modal.addEventListener('click',e=>{if(e.target.classList.contains('remove-assignment')) e.target.closest('.assignment-row').remove();}); modal.querySelector('[data-action="deactivate-teacher"]')?.addEventListener('click', async () => {
+  if (!window.confirm(`¿Desea desactivar a ${activeModal.name}? El docente no se eliminará y podrá conservarse su historial.`)) return;
+  try {
+    await deactivateTeacher(activeModal);
+    modal.remove();
+    flash('Docente desactivado correctamente.');
+    render();
+  } catch (error) {
+    console.error('Error al desactivar docente:', error);
+    flash(firestoreErrorMessage(error), 'error');
+  }
+}); modal.querySelector('form').onsubmit=submitTeacher; }
 function firestoreErrorMessage(error) {
   if (error?.code === 'permission-denied') {
     return 'Firebase rechazó el guardado: la cuenta debe tener rol administrador y estar activa en users/{UID}.';
@@ -69,7 +80,7 @@ async function submitTeacher(e) {
     const data = {
       ...Object.fromEntries(new FormData(form)),
       assignments,
-      active: activeModal?.active ?? true,
+      active: data.status !== 'Inactivo',
     };
     const errors = validateTeacher(data, teachers, activeModal?.id);
 
