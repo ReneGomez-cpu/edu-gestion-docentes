@@ -5,7 +5,9 @@ export function validateTeacher(data, teachers, currentId = null) {
   if (!data.name.trim()) errors.name = 'El nombre completo es obligatorio.';
   if (!data.code.trim()) errors.code = 'El identificador institucional es obligatorio.';
   if (!data.specialty) errors.specialty = 'Seleccione una especialidad.';
-  if (!/^\+?[0-9 ()-]{7,20}$/.test(data.phone.trim())) errors.phone = 'Ingrese un teléfono válido.';
+ if (!/^\d{4}[- ]?\d{4}$/.test(data.phone.trim())) {
+  errors.phone = 'Ingrese un teléfono válido de 8 dígitos. Ejemplo: 7123-4567.';
+}
   if (teachers.some(t => t.code.toLowerCase() === data.code.trim().toLowerCase() && t.id !== currentId)) errors.code = 'Este identificador ya está registrado.';
   return errors;
 }
