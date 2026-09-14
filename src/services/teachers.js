@@ -24,3 +24,14 @@ export async function listTeachers(filters = {}) {
     return matchesText && (!filters.shift || t.assignments?.some(a => a.shift === filters.shift));
   }).sort((a, b) => a.name.localeCompare(b.name, 'es'));
 }
+
+export async function deactivateTeacher(teacher) {
+  const deactivatedTeacher = {
+    ...teacher,
+    active: false,
+    status: 'Inactivo',
+    updatedAt: new Date().toISOString(),
+  };
+  await repository.save(deactivatedTeacher);
+  return deactivatedTeacher;
+}
