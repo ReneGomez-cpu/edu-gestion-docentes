@@ -77,10 +77,11 @@ async function submitTeacher(e) {
       subject: row.querySelector('[name="subject"]').value.trim(),
       shift: row.querySelector('[name="shift"]').value,
     }));
+    const formData = Object.fromEntries(new FormData(form));
     const data = {
-      ...Object.fromEntries(new FormData(form)),
+      ...formData,
       assignments,
-      active: data.status !== 'Inactivo',
+      active: formData.status !== 'Inactivo',
     };
     const errors = validateTeacher(data, teachers, activeModal?.id);
 
