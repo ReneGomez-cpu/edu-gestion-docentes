@@ -71,7 +71,7 @@ El ID del documento debe coincidir exactamente con el UID de Firebase Authentica
 
 ## Roles y seguridad
 
-| Rol | Puede consultar | Registrar / editar docentes | Gestionar usuarios |
+| Rol | Puede consultar fichas | Registrar / editar / desactivar docentes | Gestionar usuarios |
 |---|---:|---:|---:|
 | `admin` | Sí | Sí | Sí |
 | `user` | Sí | No | No |
@@ -82,13 +82,14 @@ Las reglas de Firestore exigen que toda cuenta tenga un documento activo en `use
 
 - Inicio y cierre de sesión con Firebase Authentication.
 - Dashboard con total de docentes, asignaciones, necesidades de equipo y distribución por turno.
-- Registro y edición de docentes.
+- Registro, edición y ficha individual de docentes.
 - Varias asignaciones académicas por docente.
 - Eliminación de asignaciones sin eliminar al docente.
+- Desactivación lógica de docentes: conserva el documento y las asignaciones en Firestore, pero lo excluye del directorio y métricas activas.
 - Estado activo/inactivo para conservar el historial institucional.
 - Directorio con búsqueda por nombre, código, especialidad, grado, sección, asignatura o turno.
 - Filtro por turno matutino o vespertino.
-- Roles de administrador y usuario autorizado.
+- Roles de administrador y usuario autorizado; las acciones de gestión se ocultan a usuarios de consulta.
 - Interfaz adaptable a escritorio, tablet y teléfono.
 
 ## Validaciones implementadas
@@ -99,6 +100,7 @@ Las reglas de Firestore exigen que toda cuenta tenga un documento activo en `use
 - Las observaciones son opcionales.
 - Mensajes comprensibles ante datos inválidos, permisos insuficientes o errores de conexión.
 - Firestore impide que un usuario con rol `user` guarde cambios aunque intente hacerlo desde la interfaz.
+- La interfaz oculta los botones de registro y edición al rol `user`; este rol conserva el acceso de lectura a la ficha individual.
 
 ## Configuración de Firebase
 
@@ -140,10 +142,12 @@ firebase deploy --only hosting --project centro-escolar-36970
 | Asignación sin grado | Rechazada |
 | Observaciones vacías | Permitidas (campo opcional) |
 | Usuario autorizado intenta guardar cambios | Rechazado por reglas de Firestore |
+| Usuario autorizado consulta ficha individual | Correcto, sin opciones de edición |
+| Botón Cancelar en formulario docente | Correcto, cierra sin guardar |
+| Desactivación de docente como administrador | Correcto, confirma la acción y conserva el documento en Firestore |
 
 ## Próximas mejoras
 
-- Ocultar acciones administrativas de la interfaz al rol `user`.
-- Crear una ficha individual detallada por docente.
+- Mostrar y reactivar docentes inactivos desde una vista administrativa.
 - Agregar pruebas automatizadas.
 - Incorporar recuperación de contraseña y verificación de correo.
