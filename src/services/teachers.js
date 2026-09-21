@@ -19,7 +19,8 @@ export async function saveTeacher(data, id) {
 export async function listTeachers(filters = {}) {
   const teachers = await repository.getAll();
   const query = (filters.query || '').toLowerCase().trim();
-  return teachers.filter(t => t.active !== false).filter(t => {
+  const showInactive = filters.status === 'inactive';
+  return teachers.filter(t => showInactive ? t.active === false : t.active !== false).filter(t => {
     const matchesText = !query || [t.name, t.code, t.specialty, ...(t.assignments || []).flatMap(a => [a.grade, a.section, a.shift, a.subject])].join(' ').toLowerCase().includes(query);
     return matchesText && (!filters.shift || t.assignments?.some(a => a.shift === filters.shift));
   }).sort((a, b) => a.name.localeCompare(b.name, 'es'));
@@ -34,4 +35,15 @@ export async function deactivateTeacher(teacher) {
   };
   await repository.save(deactivatedTeacher);
   return deactivatedTeacher;
+}
+
+export async function reactivateTeacher(teacher) {
+  const reactivatedTeacher = {
+    ...teacher,
+    active: true,
+    status: 'Activo',
+    updatedAt: new Date().toISOString(),
+  };
+  await repository.save(reactivatedTeacher);
+  return reactivatedTeacher;
 }
