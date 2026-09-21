@@ -1,12 +1,13 @@
 import { auth } from './services/auth.js';
 import { repository } from './services/database.js';
-import { deactivateTeacher, listTeachers, saveTeacher, validateTeacher } from './services/teachers.js';
+import { deactivateTeacher, listTeachers, reactivateTeacher, saveTeacher, validateTeacher } from './services/teachers.js';
 import { shell } from './components/layout.js';
 import { assignmentRow, teacherForm } from './components/teacher-form.js';
 
 const app = document.querySelector('#app');
 let page = 'dashboard';
 let activeModal = null;
+let teacherStatus = 'active';
 const canManageTeachers = () => auth.current()?.role === 'admin';
 const escapes = value => String(value || '').replace(/[&<>"']/g, x => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;' })[x]);
 function flash(message, type = 'success') { document.querySelector('.toast')?.remove(); app.insertAdjacentHTML('beforeend', `<div class="toast ${type}">${type === 'success' ? '✓' : '!'} ${message}</div>`); setTimeout(() => document.querySelector('.toast')?.remove(), 3600); }
@@ -17,11 +18,56 @@ async function loginView() {
 }
 function metrics(teachers) { const assignments = teachers.flatMap(t => t.assignments || []); const cards = [['Docentes activos', teachers.length, '♙'],['Asignaciones', assignments.length, '▤'],['Requieren equipo', teachers.filter(t => t.needsEquipment === 'Sí').length, '!'],['Especialidades', new Set(teachers.map(t => t.specialty)).size, '◈']]; const shifts = ['Matutino','Vespertino'].map(s => [s, assignments.filter(a => a.shift === s).length]); const total = Math.max(1, shifts.reduce((a, [, n]) => a+n, 0)); return `<div class="metrics">${cards.map(([title,value,ico]) => `<article class="metric"><span>${ico}</span><div><small>${title}</small><strong>${value}</strong><em>Actualizado ahora</em></div></article>`).join('')}</div><section class="dashboard-grid"><article class="card chart"><div class="card-title"><div><p class="eyebrow">DISTRIBUCIÓN</p><h2>Asignaciones por turno</h2></div><span class="chip">Período actual</span></div><div class="bars">${shifts.map(([name,count]) => `<div><div class="bar-label"><span>${name}</span><strong>${count}</strong></div><div class="bar-track"><i style="width:${count/total*100}%"></i></div></div>`).join('')}</div></article><article class="card"><p class="eyebrow">ATENCIÓN</p><h2>Necesidades de equipo</h2><div class="equipment-count">${teachers.filter(t=>t.needsEquipment==='Sí').length}</div><p class="muted">docentes requieren asignación o renovación de equipo.</p></article></section>`; }
 async function dashboardView() { const teachers = await listTeachers(); return shell(auth.current(), 'dashboard', `<div class="content"><div class="page-intro"><div><p class="muted">Vista general de la operación académica.</p></div>${canManageTeachers() ? '<button class="button primary" data-action="new-teacher">+ Registrar docente</button>' : ''} </div>${metrics(teachers)}<section class="card activity"><div class="card-title"><h2>Docentes registrados recientemente</h2><button class="text-button" data-route="teachers">Ver directorio →</button></div>${teachers.slice(0,4).map(t=>`<div class="activity-row"><div class="avatar">${t.name.slice(0,1)}</div><div><strong>${escapes(t.name)}</strong><small>${escapes(t.specialty)} · ${escapes(t.code)}</small></div><span class="status">${t.status || 'Activo'}</span></div>`).join('') || '<p class="empty">Aún no hay docentes registrados.</p>'}</section></div>`); }
-async function teachersView() { const teachers = await listTeachers(); const manageTeachers = canManageTeachers(); const rows = teachers.map(t => `<tr><td><div class="person"><span class="avatar">${t.name.slice(0,1)}</span><div><button class="teacher-link" data-action="view-teacher" data-id="${t.id}"><strong>${escapes(t.name)}</strong><small>${escapes(t.code)}</small></button></div></div></td><td>${escapes(t.specialty)}</td><td>${(t.assignments||[]).map(a=>`${escapes(a.grade)} ${escapes(a.section)}`).join(', ') || 'Sin asignación'}</td><td><span class="status">${t.status || 'Activo'}</span></td>${manageTeachers ? `<td><button class="icon-button" data-action="edit-teacher" data-id="${t.id}" title="Editar">✎</button></td>` : ''} </tr>`).join(''); return shell(auth.current(), 'teachers', `<div class="content"><div class="page-intro"><p class="muted">${teachers.length} docentes activos en el directorio.</p>${manageTeachers ? '<button class="button primary" data-action="new-teacher">+ Registrar docente</button>' : ''} </div><section class="card directory"><div class="filters"><label class="search">⌕ <input id="search" placeholder="Buscar por nombre, código, especialidad, grado..." /></label><select id="shift-filter"><option value="">Todos los turnos</option><option>Matutino</option><option>Vespertino</option></select></div><div class="table-wrap"><table><thead><tr><th>DOCENTE</th><th>ESPECIALIDAD</th><th>ASIGNACIONES</th><th>ESTADO</th>${manageTeachers ? '<th></th>' : ''} </tr></thead><tbody>${rows || '<tr><td colspan="5" class="empty">No se encontraron docentes.</td></tr>'}</tbody></table></div></section></div>`); }
+function teacherRows(teachers, manageTeachers, showInactive) {
+  return teachers.map(teacher => `<tr><td><div class="person"><span class="avatar">${teacher.name.slice(0, 1)}</span><div><button class="teacher-link" data-action="view-teacher" data-id="${teacher.id}"><strong>${escapes(teacher.name)}</strong><small>${escapes(teacher.code)}</small></button></div></div></td><td>${escapes(teacher.specialty)}</td><td>${(teacher.assignments || []).map(assignment => `${escapes(assignment.grade)} ${escapes(assignment.section)}`).join(', ') || 'Sin asignación'}</td><td><span class="status ${showInactive ? 'inactive-status' : ''}">${showInactive ? 'Inactivo' : escapes(teacher.status || 'Activo')}</span></td>${manageTeachers ? `<td>${showInactive ? `<button class="button secondary reactivate-button" data-action="reactivate-teacher" data-id="${teacher.id}">Reactivar</button>` : `<button class="icon-button" data-action="edit-teacher" data-id="${teacher.id}" title="Editar">✎</button>`}</td>` : ''}</tr>`).join('');
+}
+
+async function teachersView() {
+  const manageTeachers = canManageTeachers();
+  const showInactive = manageTeachers && teacherStatus === 'inactive';
+  const teachers = await listTeachers({ status: showInactive ? 'inactive' : 'active' });
+  const rows = teacherRows(teachers, manageTeachers, showInactive);
+  const statusFilter = manageTeachers ? `<select id="status-filter" aria-label="Estado de docentes"><option value="active" ${showInactive ? '' : 'selected'}>Docentes activos</option><option value="inactive" ${showInactive ? 'selected' : ''}>Docentes inactivos</option></select>` : '';
+  const countLabel = showInactive ? `${teachers.length} docentes inactivos en el historial.` : `${teachers.length} docentes activos en el directorio.`;
+  const emptyMessage = showInactive ? 'No hay docentes inactivos.' : 'No se encontraron docentes.';
+  const columnCount = manageTeachers ? 5 : 4;
+
+  return shell(auth.current(), 'teachers', `<div class="content"><div class="page-intro"><p class="muted">${countLabel}</p>${manageTeachers && !showInactive ? '<button class="button primary" data-action="new-teacher">+ Registrar docente</button>' : ''}</div><section class="card directory"><div class="filters"><label class="search">⌕ <input id="search" placeholder="Buscar por nombre, código, especialidad, grado..." /></label><select id="shift-filter"><option value="">Todos los turnos</option><option>Matutino</option><option>Vespertino</option></select>${statusFilter}</div><div class="table-wrap"><table><thead><tr><th>DOCENTE</th><th>ESPECIALIDAD</th><th>ASIGNACIONES</th><th>ESTADO</th>${manageTeachers ? '<th></th>' : ''}</tr></thead><tbody>${rows || `<tr><td colspan="${columnCount}" class="empty">${emptyMessage}</td></tr>`}</tbody></table></div></section></div>`);
+}
 async function usersView() { const users=await repository.getUsers(); return shell(auth.current(),'users',`<div class="content"><div class="page-intro"><p class="muted">Roles de acceso registrados. Los nuevos usuarios se gestionan desde Firebase Authentication en producción.</p></div><section class="card directory"><div class="table-wrap"><table><thead><tr><th>USUARIO</th><th>CORREO</th><th>ROL</th><th>ESTADO</th></tr></thead><tbody>${users.map(u=>`<tr><td><strong>${escapes(u.name)}</strong></td><td>${escapes(u.email)}</td><td>${u.role==='admin'?'Administrador':'Usuario autorizado'}</td><td><span class="status">Activo</span></td></tr>`).join('')}</tbody></table></div></section></div>`); }
 async function render() { await auth.restore(); if (!auth.current()) return loginView(); app.innerHTML = page === 'dashboard' ? await dashboardView() : page === 'teachers' ? await teachersView() : await usersView(); bindShell(); }
-function bindShell() { app.querySelectorAll('[data-route]').forEach(b => b.onclick = () => { page = b.dataset.route; render(); }); app.querySelector('[data-action="menu"]')?.addEventListener('click',()=>app.querySelector('.sidebar').classList.toggle('visible')); app.querySelector('[data-action="signout"]')?.addEventListener('click',()=>{auth.signOut(); loginView();}); app.querySelector('[data-action="new-teacher"]')?.addEventListener('click',()=>openTeacher()); app.querySelectorAll('[data-action="view-teacher"]').forEach(b => b.onclick = async () => openTeacherProfile(await repository.get(b.dataset.id))); app.querySelectorAll('[data-action="edit-teacher"]').forEach(b=>b.onclick=async()=>openTeacher(await repository.get(b.dataset.id))); const search = app.querySelector('#search'); if(search) search.oninput = filterTable; app.querySelector('#shift-filter')?.addEventListener('change',filterTable); }
-async function filterTable() { const visible = await listTeachers({query:document.querySelector('#search').value,shift:document.querySelector('#shift-filter').value}); document.querySelector('tbody').innerHTML = visible.map(t=>`<tr><td><div class="person"><span class="avatar">${t.name.slice(0,1)}</span><div><button class="teacher-link" data-action="view-teacher" data-id="${t.id}"><strong>${escapes(t.name)}</strong><small>${escapes(t.code)}</small></button></div></div></td><td>${escapes(t.specialty)}</td><td>${(t.assignments||[]).map(a=>`${escapes(a.grade)} ${escapes(a.section)}`).join(', ')}</td><td><span class="status">${t.status||'Activo'}</span></td>${canManageTeachers() ? `<td><button class="icon-button" data-action="edit-teacher" data-id="${t.id}">✎</button></td>` : ''} </tr>`).join('') || `<tr><td colspan="${canManageTeachers() ? 5 : 4}" class="empty">Sin coincidencias para su búsqueda.</td></tr>`; bindShell(); }
+function bindShell() { app.querySelectorAll('[data-route]').forEach(b => b.onclick = () => { page = b.dataset.route; render(); }); app.querySelector('[data-action="menu"]')?.addEventListener('click',()=>app.querySelector('.sidebar').classList.toggle('visible')); app.querySelector('[data-action="signout"]')?.addEventListener('click',()=>{auth.signOut(); loginView();}); app.querySelector('[data-action="new-teacher"]')?.addEventListener('click',()=>openTeacher()); app.querySelectorAll('[data-action="view-teacher"]').forEach(b => b.onclick = async () => openTeacherProfile(await repository.get(b.dataset.id))); app.querySelectorAll('[data-action="edit-teacher"]').forEach(b=>b.onclick=async()=>openTeacher(await repository.get(b.dataset.id))); app.querySelectorAll('[data-action="reactivate-teacher"]').forEach(button => button.onclick = async () => reactivateTeacherRecord(button.dataset.id)); const search = app.querySelector('#search'); if(search) search.oninput = filterTable; app.querySelector('#shift-filter')?.addEventListener('change',filterTable); app.querySelector('#status-filter')?.addEventListener('change', event => { teacherStatus = event.target.value; render(); }); }
+async function filterTable() {
+  const manageTeachers = canManageTeachers();
+  const showInactive = manageTeachers && teacherStatus === 'inactive';
+  const visible = await listTeachers({
+    query: document.querySelector('#search').value,
+    shift: document.querySelector('#shift-filter').value,
+    status: showInactive ? 'inactive' : 'active',
+  });
+  const body = document.querySelector('tbody');
+  body.innerHTML = teacherRows(visible, manageTeachers, showInactive) || `<tr><td colspan="${manageTeachers ? 5 : 4}" class="empty">Sin coincidencias para su búsqueda.</td></tr>`;
+  bindShell();
+}
+
+async function reactivateTeacherRecord(id) {
+  const teacher = await repository.get(id);
+  if (!teacher) {
+    flash('No se encontró el docente solicitado.', 'error');
+    return;
+  }
+  if (!window.confirm(`¿Desea reactivar a ${teacher.name}? Volverá a aparecer en el directorio activo.`)) return;
+
+  try {
+    await reactivateTeacher(teacher);
+    flash('Docente reactivado correctamente.');
+    render();
+  } catch (error) {
+    console.error('Error al reactivar docente:', error);
+    flash(firestoreErrorMessage(error), 'error');
+  }
+}
+
 function teacherProfile(teacher) {
   const assignments = teacher.assignments || [];
   const assignmentList = assignments.length
