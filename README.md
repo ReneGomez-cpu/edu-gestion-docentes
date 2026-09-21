@@ -86,6 +86,7 @@ Las reglas de Firestore exigen que toda cuenta tenga un documento activo en `use
 - Varias asignaciones académicas por docente.
 - Eliminación de asignaciones sin eliminar al docente.
 - Desactivación lógica de docentes: conserva el documento y las asignaciones en Firestore, pero lo excluye del directorio y métricas activas.
+- Vista administrativa de docentes inactivos, con búsqueda, filtros y acción de reactivación.
 - Estado activo/inactivo para conservar el historial institucional.
 - Directorio con búsqueda por nombre, código, especialidad, grado, sección, asignatura o turno.
 - Filtro por turno matutino o vespertino.
@@ -145,9 +146,10 @@ firebase deploy --only hosting --project centro-escolar-36970
 | Usuario autorizado consulta ficha individual | Correcto, sin opciones de edición |
 | Botón Cancelar en formulario docente | Correcto, cierra sin guardar |
 | Desactivación de docente como administrador | Correcto, confirma la acción y conserva el documento en Firestore |
+| Vista de docentes inactivos | Correcto, disponible solo para administrador |
+| Reactivación de docente | Correcto, conserva datos y asignaciones y lo devuelve al directorio activo |
 
 ## Próximas mejoras
 
-- Mostrar y reactivar docentes inactivos desde una vista administrativa.
 - Agregar pruebas automatizadas.
 - Incorporar recuperación de contraseña y verificación de correo.
